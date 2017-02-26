@@ -1,4 +1,4 @@
-# Embroidery CSV Viewer / Editor
+# Embroidery CSV Viewer & Editor
 
 The purpose of this project is to be able to view and edit CSV files generated for embroidery.
 
