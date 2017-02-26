@@ -14,7 +14,7 @@
         var pointWidth = 1;
         var pointHeight = 1;
         //What to multiply each coordinate by (enlarge)
-        var xyMultiplier = 10;
+        var xyMultiplier = 7;
 
         //The last point drawn
         var lastPoint = null;
@@ -50,7 +50,7 @@
         }
 
         function parseLine(line) {
-          var fields = line.split(',')
+          var fields = line.split(',');
           switch (fields[0]) {
             case '#':
               processHeader(fields);
@@ -286,7 +286,7 @@
 
         function setPercentComplete(percent) {
           //This check prevents updating the percentage complete if no change has been made.
-          if(percent_complete != percent){
+          if (percent_complete != percent) {
             $('#percent_complete').text(percent + '%');
             percent_complete = percent;
           }
@@ -325,7 +325,7 @@
         }
 
         function getPercentDrawn() {
-          percent_complete = ((currentPointIndex+1)/total_number_steps)*100;
+          percent_complete = ((currentPointIndex + 1) / total_number_steps) * 100;
           return percent_complete.toPrecision(2);
         }
 
@@ -335,12 +335,27 @@
           }
         }
 
-        //Run on page load ##########################
-        jQuery.get('<%= test_file_path %>', function (data) {
-          point_data = data.replace(/\"/g, '').split("\n");
+        $('[data-action="parse-csv"]').on('click', function () {
+          point_data = $('#csv').val().replace(/\"/g, '').split("\n");
           setNumberSteps(point_data.length)
-          drawCanvas();
+          redrawCanvas();
         });
+
+        $('[data-action="load-example-csv"]').on('click', function () {
+          jQuery.get('<%= test_file_path %>', function (data) {
+            $('#csv').val(data);
+            point_data = data.replace(/\"/g, '').split("\n");
+            setNumberSteps(point_data.length)
+            drawCanvas();
+          });
+        });
+
+        //Run on page load ##########################
+//        jQuery.get('<%= test_file_path %>', function (data) {
+//          point_data = data.replace(/\"/g, '').split("\n");
+//          setNumberSteps(point_data.length)
+//          drawCanvas();
+//        });
         setDrawSpeed($('#draw_speed_slider').slider('value') * -1);
         setDrawSteps($('#draw_step_slider').slider('value'));
         disableDebug();
@@ -397,27 +412,26 @@
       .state_drawing {
         color: green;
       }
+
+      #csv {
+        width: 500px;
+        height: 300px;
+      }
     </style>
 <% end %>
 <div id="inputs">
-
-  <div class="section_title">Actions</div>
+  <div class="section_title">CSV</div>
   <div class="section">
-    <div id="actions">
-      <button data-action="clear-canvas">Clear</button>
-      <button data-action="redraw-canvas">Redraw Canvas</button>
-      <button data-action="redraw-canvas-slow">Redraw Canvas Slowly</button>
-      <br/>
-      <button data-action="pause-drawing">Pause Drawing</button>
-      <button data-action="resume-drawing">Resume Drawing</button>
-      <button data-action="stop-drawing">Stop Drawing</button>
-      <br/>
-      <button data-action="toggle-debug"></button>
-    </div>
+    <textarea id="csv">
+
+    </textarea>
+  </div>
+  <div class="section">
+    <button data-action="parse-csv">Parse CSV</button>
+    <button data-action="load-example-csv">Load Example</button>
   </div>
   <div class="section_title">Options</div>
   <div class="section">
-
     <div id="options">
       <div class="option_section_title">Lines</div>
       <div class="option_section">
@@ -452,6 +466,20 @@
       </div>
     </div>
   </div>
+  <div class="section_title">Actions</div>
+  <div class="section">
+    <div id="actions">
+      <button data-action="clear-canvas">Clear</button>
+      <button data-action="redraw-canvas">Redraw Canvas</button>
+      <button data-action="redraw-canvas-slow">Redraw Canvas Slowly</button>
+      <br/>
+      <button data-action="pause-drawing">Pause Drawing</button>
+      <button data-action="resume-drawing">Resume Drawing</button>
+      <button data-action="stop-drawing">Stop Drawing</button>
+      <br/>
+      <button data-action="toggle-debug"></button>
+    </div>
+  </div>
   <div class="section_title">Status</div>
   <div class="section">
     <div id="status">
@@ -463,5 +491,5 @@
   </div>
 </div>
 <div id="canvas_container">
-  <canvas height="1000" width="1000" id="canvas"></canvas>
+  <canvas height="700" width="800" id="canvas"></canvas>
 </div>
