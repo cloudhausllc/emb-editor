@@ -1,0 +1,467 @@
+<%= content_for :head do %>
+    <script>
+      $(document).on('turbolinks:load', function () {
+        var canvas = document.getElementById('canvas');
+        var ctx = canvas.getContext('2d');
+        var total_number_steps = 0;
+        var current_step = 0;
+        var percent_complete = 0;
+        var debug = false;
+
+        //Parsed CSV data
+        var point_data = null;
+        //The dimensions to make each point
+        var pointWidth = 1;
+        var pointHeight = 1;
+        //What to multiply each coordinate by (enlarge)
+        var xyMultiplier = 10;
+
+        //The last point drawn
+        var lastPoint = null;
+
+        //The index of the currently processing line
+        var currentPointIndex = 0;
+
+        //How fast to draw
+        var drawSpeed = 1;
+
+        var currentlyDrawing = false;
+
+        var maxTimerSpeed = 1;
+        var minTimerSpeed = 1500;
+
+        var maxDrawSteps = 100;
+        var minDrawSteps = 1;
+        var currentDrawSteps = maxDrawSteps;
+
+        var drawingPaused = false;
+
+        var current_canvas_state = null;
+
+        const CANVAS_STATE_DRAWING = "Drawing";
+        const CANVAS_STATE_STOPPED = "Stopped";
+        const CANVAS_STATE_PAUSED = "Paused";
+
+        var user_options = {
+          show_points: true,
+          colorize_points: true,
+          show_lines: true,
+          colorize_lines: true,
+        }
+
+        function parseLine(line) {
+          var fields = line.split(',')
+          switch (fields[0]) {
+            case '#':
+              processHeader(fields);
+              break;
+            case '$':
+              processColor(fields);
+              break;
+            case '*':
+              processCommand(fields);
+              break;
+          }
+        }
+
+        function drawLine(x1, y1, x2, y2) {
+          ctx.beginPath();
+          ctx.moveTo(x1, y1);
+          ctx.lineTo(x2, y2);
+          ctx.stroke();
+        }
+
+        function createPoint(x, y, h, w) {
+          if (user_options.show_points)
+            log(ctx.fillRect(x, y, h, w));
+          if (lastPoint != null && user_options.show_lines) {
+            drawLine(lastPoint.x, lastPoint.y, x, y);
+          }
+          lastPoint = {x: x, y: y};
+        }
+
+        function setLineColor(r, g, b, a) {
+          ctx.strokeStyle = 'rgba(' + r + ', ' + g + ', ' + b + ', ' + a + ')';
+        }
+
+        function setPointColor(r, g, b, a) {
+          ctx.fillStyle = 'rgba(' + r + ', ' + g + ', ' + b + ', ' + a + ')';
+        }
+
+        function processCommand(line) {
+          switch (line[1]) {
+            case 'JUMP':
+//              //No clue what to do with these yet...
+//              break;
+            case 'STITCH':
+              createPoint(line[2] * xyMultiplier, line[3] * xyMultiplier, pointHeight, pointWidth)
+              break;
+            case 'END':
+              setCanvasStateStopped();
+              break;
+          }
+        }
+
+        function processColor(line) {
+          setColor(line[2], line[3], line[4], 1)
+        }
+
+        function setColor(r, g, b, a) {
+          if (user_options.colorize_points) {
+            setPointColor(r, g, b, a);
+          }
+          if (user_options.colorize_lines) {
+            setLineColor(r, g, b, a);
+          }
+
+        }
+
+        function processHeader(line) {
+          log('Not yet implemented', line);
+        }
+
+        function drawCanvas() {
+          setDrawingState(CANVAS_STATE_DRAWING);
+          jQuery.each(point_data, function (index, line) {
+            setCurrentStepNumber(index + 1);
+            currentPointIndex = index;
+            parseLine(line);
+            setPercentComplete(getPercentDrawn());
+          });
+          setCanvasStateStopped();
+        }
+
+        function drawNextPoint() {
+          if (currentPointIndex < point_data.length - 1) {
+            parseLine(point_data[currentPointIndex]);
+            currentPointIndex++;
+            setCurrentStepNumber(currentPointIndex);
+            setPercentComplete(getPercentDrawn());
+          } else {
+            setCanvasStateStopped();
+          }
+        }
+
+        $('[data-action="stop-drawing"]').click(function (event) {
+          setCanvasStateStopped();
+        });
+
+        $('[data-action="pause-drawing"]').click(function (event) {
+          setCanvasStatePaused();
+        });
+
+        $('[data-action="resume-drawing"]').click(function (event) {
+          setCanvasStateDrawing();
+        });
+
+
+        $('[data-action="clear-canvas"]').click(function (event) {
+          clearCanvas();
+        });
+
+        function clearCanvas() {
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+        }
+
+        $('[data-action="redraw-canvas"]').click(function (event) {
+          redrawCanvas();
+        });
+
+        function redrawCanvas() {
+          clearCanvas();
+          drawCanvas();
+        }
+
+        $('[data-action="redraw-canvas-slow"]').click(function (event) {
+          redrawCanvasSlow();
+        });
+
+        $('[data-action="toggle-debug').click(function (event) {
+          if (debug) {
+            disableDebug();
+          } else {
+            enableDebug();
+          }
+        });
+
+        function enableDebug() {
+          setDebug(true, 'Disable Debug');
+        }
+
+        function disableDebug() {
+          setDebug(false, 'Enable Debug');
+        }
+
+        function setDebug(value, button_text) {
+          debug = value;
+          $('[data-action="toggle-debug"]').html(button_text);
+        }
+
+        $('.option input[type="checkbox"]').on('change', function (event) {
+          user_options[$(this).attr('id')] = $(this).is(':checked');
+        });
+
+        function redrawCanvasSlow() {
+          clearCanvas();
+          currentPointIndex = 0;
+          currentlyDrawing = true;
+          setCanvasStateDrawing();
+          drawNextPointWithTimer();
+        }
+
+        function drawNextPointWithTimer() {
+          setTimeout(function () {
+            if (!drawingPaused) {
+              for (var i = 1; i <= currentDrawSteps; i++) {
+                if (currentlyDrawing) {
+                  drawNextPoint();
+                }
+              }
+            }
+            if (currentlyDrawing) {
+              drawNextPointWithTimer();
+            }
+          }, drawSpeed)
+        }
+
+        function setCanvasStateStopped() {
+          currentPointIndex = 0;
+          currentlyDrawing = false;
+          setPercentComplete(0);
+          setDrawingState(CANVAS_STATE_STOPPED);
+        }
+
+        function setCanvasStatePaused() {
+          drawingPaused = true;
+          setDrawingState(CANVAS_STATE_PAUSED);
+        }
+
+        function setCanvasStateDrawing() {
+          drawingPaused = false;
+          setDrawingState(CANVAS_STATE_DRAWING);
+        }
+
+        $('.option input[type="checkbox"]').each(function (index, element) {
+          user_options[$(element).attr('id')] = $(element).is(':checked');
+        })
+
+        $("#draw_speed_slider").slider({
+          value: minTimerSpeed * -1,
+          min: minTimerSpeed * -1,
+          max: maxTimerSpeed * -1,
+          step: 1,
+          slide: function (event, ui) {
+            setDrawSpeed(ui.value * -1)
+          }
+        });
+
+        function setDrawSpeed(speed) {
+          drawSpeed = speed;
+          $("#draw_speed_amount").val(speed + " ms");
+        }
+
+        $("#draw_step_slider").slider({
+          value: minDrawSteps,
+          min: minDrawSteps,
+          max: maxDrawSteps,
+          step: 1,
+          slide: function (event, ui) {
+            setDrawSteps(ui.value);
+          }
+        });
+
+        function setDrawSteps(numSteps) {
+          currentDrawSteps = numSteps;
+          $('#draw_step_amount').val(numSteps);
+        }
+
+        function setNumberSteps(total) {
+          total_number_steps = total;
+          $('#number_of_steps').html(total);
+        }
+
+        function setCurrentStepNumber(number) {
+          $('#current_step').html(number);
+        }
+
+        function setPercentComplete(percent) {
+          //This check prevents updating the percentage complete if no change has been made.
+          if(percent_complete != percent){
+            $('#percent_complete').text(percent + '%');
+            percent_complete = percent;
+          }
+        }
+
+        function setDrawingState(state) {
+          var drawing_state_output = $('#drawing_state');
+          var new_drawing_state_class = getDrawingStateClass(state);
+          var old_drawing_state_class = getDrawingStateClass(current_canvas_state);
+
+          drawing_state_output.text(state);
+          drawing_state_output.addClass(new_drawing_state_class);
+          if (old_drawing_state_class != '' && new_drawing_state_class != old_drawing_state_class) {
+            drawing_state_output.removeClass(old_drawing_state_class);
+          }
+
+          current_canvas_state = state;
+
+        }
+
+        function getDrawingStateClass(state) {
+          switch (state) {
+            case CANVAS_STATE_DRAWING:
+              return 'state_drawing';
+              break;
+            case CANVAS_STATE_STOPPED:
+              return 'state_stopped';
+              break;
+            case CANVAS_STATE_PAUSED:
+              return 'state_paused';
+              break;
+            default:
+              return '';
+              break;
+          }
+        }
+
+        function getPercentDrawn() {
+          percent_complete = ((currentPointIndex+1)/total_number_steps)*100;
+          return percent_complete.toPrecision(2);
+        }
+
+        function log() {
+          if (debug) {
+            console.log(arguments);
+          }
+        }
+
+        //Run on page load ##########################
+        jQuery.get('<%= test_file_path %>', function (data) {
+          point_data = data.replace(/\"/g, '').split("\n");
+          setNumberSteps(point_data.length)
+          drawCanvas();
+        });
+        setDrawSpeed($('#draw_speed_slider').slider('value') * -1);
+        setDrawSteps($('#draw_step_slider').slider('value'));
+        disableDebug();
+        //###########################################
+      })
+    </script>
+    <style>
+      #canvas {
+        border: 1px solid black;
+      }
+
+      #canvas_container {
+        float: left;
+      }
+
+      #inputs {
+        right: 20px;
+        position: fixed;
+      }
+
+      .section {
+        padding-left: 2em;
+      }
+
+      .section_title {
+        font-weight: bold;
+      }
+
+      .option_section_title {
+        font-weight: bold;
+      }
+
+      .option_section {
+        padding-left: 2em;
+      }
+
+      .option label {
+        width: 9em;
+        display: inline-block;
+      }
+
+      .status {
+        font-weight: bold;
+      }
+
+      .state_paused {
+        color: blue;
+      }
+
+      .state_stopped {
+        color: red;
+      }
+
+      .state_drawing {
+        color: green;
+      }
+    </style>
+<% end %>
+<div id="inputs">
+
+  <div class="section_title">Actions</div>
+  <div class="section">
+    <div id="actions">
+      <button data-action="clear-canvas">Clear</button>
+      <button data-action="redraw-canvas">Redraw Canvas</button>
+      <button data-action="redraw-canvas-slow">Redraw Canvas Slowly</button>
+      <br/>
+      <button data-action="pause-drawing">Pause Drawing</button>
+      <button data-action="resume-drawing">Resume Drawing</button>
+      <button data-action="stop-drawing">Stop Drawing</button>
+      <br/>
+      <button data-action="toggle-debug"></button>
+    </div>
+  </div>
+  <div class="section_title">Options</div>
+  <div class="section">
+
+    <div id="options">
+      <div class="option_section_title">Lines</div>
+      <div class="option_section">
+        <div class="option">
+          <label for="show_lines">Show Lines</label><input type="checkbox" id="show_lines">
+        </div>
+        <div class="option">
+          <label for="colorize_lines">Colorize Lines</label><input type="checkbox" id="colorize_lines">
+        </div>
+      </div>
+      <div class="option_section_title">Points</div>
+      <div class="option_section">
+        <div class="option">
+          <label for="show_points">Show Points</label><input type="checkbox" id="show_points">
+        </div>
+        <div class="option">
+          <label for="colorize_points">Colorize Points</label><input type="checkbox" id="colorize_points">
+        </div>
+      </div>
+      <div class="option_section_title">Drawing</div>
+      <div class="option_section">
+        <div class="option">
+          <label for="draw_speed_amount">Draw Speed (ms):</label>
+          <input type="text" id="draw_speed_amount" readonly style="border:0; color:#f6931f; font-weight:bold;">
+          <div id="draw_speed_slider"></div>
+        </div>
+        <div class="option">
+          <label for="draw_step_amount">Draw Step Amount:</label>
+          <input type="text" id="draw_step_amount" readonly style="border:0; color:#f6931f; font-weight:bold;">
+          <div id="draw_step_slider"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="section_title">Status</div>
+  <div class="section">
+    <div id="status">
+      <span class="title">Number of Steps: </span><span class="value" id="number_of_steps"></span><br/>
+      <span class="title">Current Step: </span><span class="value" id="current_step"></span><br/>
+      <span class="title">State: </span><span class="value" id="drawing_state"></span><br/>
+      <span class="title">Complete: </span><span class="value" id="percent_complete"></span><br/>
+    </div>
+  </div>
+</div>
+<div id="canvas_container">
+  <canvas height="1000" width="1000" id="canvas"></canvas>
+</div>
